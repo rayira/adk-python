@@ -300,7 +300,7 @@ class TestBigQueryCredentialsManager:
 
     # Use the full module path as it appears in the project structure
     with patch(
-        "google.adk.tools.bigquery.bigquery_credentials.Credentials",
+        "google.adk.tools.bigquery.bigquery_credentials.google.oauth2.credentials.Credentials",
         return_value=mock_creds,
     ) as mock_credentials_class:
       result = await manager.get_valid_credentials(mock_tool_context)
@@ -376,7 +376,7 @@ class TestBigQueryCredentialsManager:
 
     # Use the correct module path - without the 'src.' prefix
     with patch(
-        "google.adk.tools.bigquery.bigquery_credentials.Credentials",
+        "google.adk.tools.bigquery.bigquery_credentials.google.oauth2.credentials.Credentials",
         return_value=mock_creds,
     ) as mock_credentials_class:
       # Complete OAuth flow with first manager
@@ -396,7 +396,7 @@ class TestBigQueryCredentialsManager:
 
     # Mock the from_authorized_user_info method for the second manager
     with patch(
-        "google.adk.tools.bigquery.bigquery_credentials.Credentials.from_authorized_user_info"
+        "google.adk.tools.bigquery.bigquery_credentials.google.oauth2.credentials.Credentials.from_authorized_user_info"
     ) as mock_from_json:
       mock_cached_creds = Mock(spec=Credentials)
       mock_cached_creds.valid = True

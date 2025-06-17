@@ -21,9 +21,10 @@ from typing import Optional
 from fastapi.openapi.models import OAuth2
 from fastapi.openapi.models import OAuthFlowAuthorizationCode
 from fastapi.openapi.models import OAuthFlows
+import google.auth.credentials
 from google.auth.exceptions import RefreshError
 from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials
+import google.oauth2.credentials
 from pydantic import BaseModel
 from pydantic import model_validator
 
@@ -45,7 +46,7 @@ class BigQueryCredentialsConfig(BaseModel):
   # Configure the model to allow arbitrary types like Credentials
   model_config = {"arbitrary_types_allowed": True}
 
-  credentials: Optional[Credentials] = None
+  credentials: Optional[google.auth.credentials.Credentials] = None
   """the existing oauth credentials to use. If set,this credential will be used
   for every end user, end users don't need to be involved in the oauthflow. This
   field is mutually exclusive with client_id, client_secret and scopes.
@@ -86,7 +87,9 @@ class BigQueryCredentialsConfig(BaseModel):
           " client_id/client_secret/scopes."
       )
 
-    if self.credentials:
+    if self.credentials and isinstance(
+        self.credentials, google.oauth2.credentials.Credentials
+    ):
       self.client_id = self.credentials.client_id
       self.client_secret = self.credentials.client_secret
       self.scopes = self.credentials.scopes
@@ -115,7 +118,7 @@ class BigQueryCredentialsManager:
 
   async def get_valid_credentials(
       self, tool_context: ToolContext
-  ) -> Optional[Credentials]:
+  ) -> Optional[google.oauth2.credentials.Credentials]:
     """Get valid credentials, handling refresh and OAuth flow as needed.
 
     Args:
@@ -127,7 +130,7 @@ class BigQueryCredentialsManager:
     # First, try to get credentials from the tool context
     creds_json = tool_context.state.get(BIGQUERY_TOKEN_CACHE_KEY, None)
     creds = (
-        Credentials.from_authorized_user_info(
+        google.oauth2.credentials.Credentials.from_authorized_user_info(
             json.loads(creds_json), self.credentials_config.scopes
         )
         if creds_json
@@ -137,6 +140,11 @@ class BigQueryCredentialsManager:
     # If credentails are empty use the default credential
     if not creds:
       creds = self.credentials_config.credentials
+
+    # If non-oauth credentials are provided then use them as is. This helps
+    # in flows such as service account keys
+    if creds and not isinstance(creds, google.oauth2.credentials.Credentials):
+      return creds
 
     # Check if we have valid credentials
     if creds and creds.valid:
@@ -159,7 +167,7 @@ class BigQueryCredentialsManager:
 
   async def _perform_oauth_flow(
       self, tool_context: ToolContext
-  ) -> Optional[Credentials]:
+  ) -> Optional[google.oauth2.credentials.Credentials]:
     """Perform OAuth flow to get new credentials.
 
     Args:
@@ -199,7 +207,7 @@ class BigQueryCredentialsManager:
 
     if auth_response:
       # OAuth flow completed, create credentials
-      creds = Credentials(
+      creds = google.oauth2.credentials.Credentials(
           token=auth_response.oauth2.access_token,
           refresh_token=auth_response.oauth2.refresh_token,
           token_uri=auth_scheme.flows.authorizationCode.tokenUrl,

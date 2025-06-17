@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from enum import Enum
 import os
 
 from google.adk.agents import llm_agent
@@ -21,24 +22,60 @@ from google.adk.tools.bigquery.config import BigQueryToolConfig
 from google.adk.tools.bigquery.config import WriteMode
 import google.auth
 
-RUN_WITH_ADC = False
+
+class CredentialsType(Enum):
+  """Write mode indicating what levels of write operations are allowed in BigQuery."""
+
+  ADC = "application-default-credentials"
+  """Application default credentials.
+
+  See https://cloud.google.com/docs/authentication/provide-credentials-adc for more details.
+  """
+
+  SERVICE_ACCOUNT_KEY = "servcie-account-key"
+  """Service Account Key credentials.
+
+  See https://cloud.google.com/iam/docs/service-account-creds#key-types for more details.
+  """
+
+  OAUTH = "oauth"
+  """OAuth credentials.
+
+  See https://developers.google.com/identity/protocols/oauth2 for more details.
+  """
 
 
+# Define an appropriate credential type
+CREDENTIALS_TYPE = CredentialsType.OAUTH
+
+
+# Define BigQuery tool config
 tool_config = BigQueryToolConfig(write_mode=WriteMode.ALLOWED)
 
-if RUN_WITH_ADC:
+if CREDENTIALS_TYPE == CredentialsType.ADC:
   # Initialize the tools to use the application default credentials.
   application_default_credentials, _ = google.auth.default()
   credentials_config = BigQueryCredentialsConfig(
       credentials=application_default_credentials
   )
-else:
+elif CREDENTIALS_TYPE == CredentialsType.SERVICE_ACCOUNT_KEY:
+  # Initialize the tools to use the credentials in the service account key.
+  # If this flow is enabled, make sure to replace the file path with your own
+  # service account key file
+  creds, _ = google.auth.load_credentials_from_file("service_account_key.json")
+  credentials_config = BigQueryCredentialsConfig(credentials=creds)
+elif CREDENTIALS_TYPE == CredentialsType.OAUTH:
   # Initiaze the tools to do interactive OAuth
   # The environment variables OAUTH_CLIENT_ID and OAUTH_CLIENT_SECRET
   # must be set
   credentials_config = BigQueryCredentialsConfig(
       client_id=os.getenv("OAUTH_CLIENT_ID"),
       client_secret=os.getenv("OAUTH_CLIENT_SECRET"),
+  )
+else:
+  raise ValueError(
+      f"Credential type {CREDENTIALS_TYPE} is not supported, please use one of"
+      " the supported types."
   )
 
 bigquery_toolset = BigQueryToolset(
