@@ -36,6 +36,7 @@ from .artifacts.in_memory_artifact_service import InMemoryArtifactService
 from .auth.credential_service.base_credential_service import BaseCredentialService
 from .code_executors.built_in_code_executor import BuiltInCodeExecutor
 from .events.event import Event
+from .flows.llm_flows.functions import find_matching_function_call
 from .memory.base_memory_service import BaseMemoryService
 from .memory.in_memory_memory_service import InMemoryMemoryService
 from .platform.thread import create_thread
@@ -337,6 +338,8 @@ class Runner:
     """Finds the agent to run to continue the session.
 
     A qualified agent must be either of:
+    - The agent that returned a function call and the last user message is a
+      function response to this function call.
     - The root agent;
     - An LlmAgent who replied last and is capable to transfer to any other agent
       in the agent hierarchy.
@@ -348,6 +351,13 @@ class Runner:
     Returns:
       The agent of the last message in the session or the root agent.
     """
+    # If the last event is a function response, should send this response to
+    # the agent that returned the corressponding function call regardless the
+    # type of the agent. e.g. a remote a2a agent may surface a credential
+    # request as a special long running function tool call.
+    event = find_matching_function_call(session.events)
+    if event and event.author:
+      return root_agent.find_agent(event.author)
     for event in filter(lambda e: e.author != 'user', reversed(session.events)):
       if event.author == root_agent.name:
         # Found root agent.
